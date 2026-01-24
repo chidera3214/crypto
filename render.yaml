@@ -1,0 +1,69 @@
+services:
+  # 1. Backend Service (Node.js)
+  - type: web
+    name: crypto-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crypto-db
+          property: connectionString
+      - key: RENDER
+        value: true
+    plan: free
+    autoDeploy: false
+
+  # 2. Frontend Service (Next.js)
+  - type: web
+    name: crypto-frontend
+    env: node
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: crypto-backend
+          property: url
+    plan: free
+    autoDeploy: false
+
+  # 3. Trading Engine (Python Background Worker)
+  - type: worker
+    name: crypto-engine
+    env: docker
+    dockerContext: ./engine
+    dockerfilePath: ./engine/Dockerfile
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: crypto-backend
+          property: url
+    plan: free
+    autoDeploy: false
+
+databases:
+  - name: crypto-db
+    plan: free
+    databaseName: crypto_db
+    user: crypto_user
+
+# Link Database to Backend
+# Note: Render Blueprints (render.yaml) automatically inject DATABASE_URL into services 
+# that have a 'database' property linked, or we can explicitly set it.
+# To link, we add 'region' and 'plan' consistency.
+# But explicitly:
+# We need to add the database link to the backend service above.
+
+# Corrected Linkage:
+# Add this to the backend service in the 'services' list:
+#   envVars:
+#     - key: DATABASE_URL
+#       fromDatabase:
+#         name: crypto-db
+#         property: connectionString
