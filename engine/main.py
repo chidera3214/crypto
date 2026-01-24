@@ -187,5 +187,26 @@ def run_scanner():
         print("... Scanning ...")
         time.sleep(30) # Scan every 30 seconds
 
+import threading
+from flask import Flask
+
+# Flask App for Render Health Check
+app = Flask(__name__)
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+@app.route('/')
+def home():
+    return "AlphaScanner Engine is Running", 200
+
 if __name__ == "__main__":
-    run_scanner()
+    # Start the Scanner in a separate background thread
+    scanner_thread = threading.Thread(target=run_scanner, daemon=True)
+    scanner_thread.start()
+    
+    # Start Flask Server (Block main thread with this)
+    # Render sets PORT env var. Default to 10000 if not set.
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
