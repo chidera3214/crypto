@@ -1,5 +1,6 @@
 # Use an official Python runtime with TA-Lib support
-FROM python:3.9-slim
+# Use an official Python runtime with TA-Lib support
+FROM python:3.11-slim
 
 # Install system dependencies required for TA-Lib
 RUN apt-get update && apt-get install -y \
