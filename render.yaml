@@ -34,24 +34,11 @@ services:
         value: 10000
     autoDeploy: false
 
-databases:
-  - name: crypto-db
-    plan: free
-    databaseName: crypto_db
-    user: crypto_user
-
-# Note: Ideally we use staticSites for frontend, but if Render is giving "field not found" errors
-# it might be easier to deploy the frontend as a lightweight Node service (web) serving static files
-# to bypass the blueprint issue if it persists.
-# HOWEVER, let's try 'staticSites' one last time with correct indentation.
-# If this fails, we will convert frontend to a 'web' service serving static files.
-
-  # 3. Frontend Service (Converted to Web Service to bypass Blueprint Spec issue)
+  # 3. Frontend Service (Web Service)
   - type: web
     name: crypto-frontend
     env: node
     buildCommand: 'cd frontend && npm install && npm run build'
-    # Use npx serve to serve the static 'out' directory on port 10000 (or $PORT)
     startCommand: 'cd frontend && npx serve@latest out -p $PORT -s'
     plan: free
     envVars:
@@ -61,3 +48,9 @@ databases:
           name: crypto-backend
           property: host
     autoDeploy: false
+
+databases:
+  - name: crypto-db
+    plan: free
+    databaseName: crypto_db
+    user: crypto_user
