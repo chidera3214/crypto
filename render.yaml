@@ -3,26 +3,28 @@ services:
   - type: web
     name: crypto-backend
     env: node
-    buildCommand: cd backend && npm install && npm run build
-    startCommand: cd backend && npm start
+    buildCommand: 'cd backend && npm install && npm run build'
+    startCommand: 'cd backend && npm start'
+    plan: free
+    autoDeploy: false
     envVars:
       - key: PORT
-        value: 10000
+        value: '10000'
       - key: DATABASE_URL
         fromDatabase:
           name: crypto-db
           property: connectionString
       - key: RENDER
-        value: true
-    plan: free
-    autoDeploy: true
+        value: 'true'
 
-  # 3. Trading Engine (Python Web Service for Free Tier)
+  # 3. Trading Engine (Python Web Service)
   - type: web
     name: crypto-engine
     env: docker
     dockerContext: ./engine
     dockerfilePath: ./engine/Dockerfile
+    plan: free
+    autoDeploy: false
     envVars:
       - key: BACKEND_URL
         fromService:
@@ -30,15 +32,14 @@ services:
           name: crypto-backend
           property: host
       - key: PORT
-        value: 10000
-    plan: free
-    autoDeploy: true
+        value: '10000'
 
 staticSites:
   # 2. Frontend Service (Next.js Static Site)
   - name: crypto-frontend
-    buildCommand: cd frontend && npm install && npm run build
+    buildCommand: 'cd frontend && npm install && npm run build'
     publishPath: ./frontend/out
+    autoDeploy: false
     envVars:
       - key: NEXT_PUBLIC_API_URL
         fromService:
@@ -47,9 +48,8 @@ staticSites:
           property: host
     routes:
       - type: rewrite
-        source: /**
+        source: '/**'
         destination: /index.html
-    autoDeploy: true
 
 databases:
   - name: crypto-db
