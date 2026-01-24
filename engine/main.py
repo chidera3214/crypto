@@ -9,7 +9,15 @@ import os
 
 # Configuration
 # Default to localhost if not set, but allow override for Render
-BASE_URL = os.getenv("BACKEND_URL", "http://localhost:4000")
+RAW_HOST = os.getenv("BACKEND_URL", "localhost:4000")
+PROTOCOL = "http" if "localhost" in RAW_HOST else "https"
+BASE_URL = RAW_HOST if RAW_HOST.startswith("http") else f"{PROTOCOL}::{RAW_HOST}"
+# Fix double colon typo possibility if logic is complex, simplify:
+if not RAW_HOST.startswith("http"):
+    BASE_URL = f"https://{RAW_HOST}" if "localhost" not in RAW_HOST else f"http://{RAW_HOST}"
+else:
+    BASE_URL = RAW_HOST
+
 BACKEND_URL = f"{BASE_URL}/signal"
 SYMBOL = "BTCUSDT"
 TIMEFRAMES = ["15m", "4h"]
