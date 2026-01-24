@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Database
+database.sqlite
+*.sqlite
+*.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Render
+# Keep render.yaml in git so Render can read the blueprint
+
+
+# Temporary
+tmp/
+coverage/
