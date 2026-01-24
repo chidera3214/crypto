@@ -2,12 +2,10 @@ services:
   # 1. Backend Service (Node.js)
   - type: web
     name: crypto-backend
-    root: backend
     env: node
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: 'cd backend && npm install && npm run build'
+    startCommand: 'cd backend && npm start'
     plan: free
-    autoDeploy: false
     envVars:
       - key: PORT
         value: 10000
@@ -17,16 +15,15 @@ services:
           property: connectionString
       - key: RENDER
         value: true
+    autoDeploy: false
 
   # 2. Trading Engine (Python Web Service)
   - type: web
     name: crypto-engine
-    root: engine
     env: docker
-    dockerfilePath: Dockerfile
-    dockerContext: .
+    dockerContext: ./engine
+    dockerfilePath: ./engine/Dockerfile
     plan: free
-    autoDeploy: false
     envVars:
       - key: BACKEND_URL
         fromService:
@@ -35,14 +32,24 @@ services:
           property: host
       - key: PORT
         value: 10000
+    autoDeploy: false
+
+databases:
+  - name: crypto-db
+    plan: free
+    databaseName: crypto_db
+    user: crypto_user
+
+# Note: Ideally we use staticSites for frontend, but if Render is giving "field not found" errors
+# it might be easier to deploy the frontend as a lightweight Node service (web) serving static files
+# to bypass the blueprint issue if it persists.
+# HOWEVER, let's try 'staticSites' one last time with correct indentation.
+# If this fails, we will convert frontend to a 'web' service serving static files.
 
 staticSites:
-  # 3. Frontend Service (Next.js Static Site)
   - name: crypto-frontend
-    root: frontend
-    buildCommand: npm install && npm run build
-    publishPath: out
-    autoDeploy: false
+    buildCommand: 'cd frontend && npm install && npm run build'
+    publishPath: frontend/out
     envVars:
       - key: NEXT_PUBLIC_API_URL
         fromService:
@@ -51,11 +58,6 @@ staticSites:
           property: host
     routes:
       - type: rewrite
-        source: /**
+        source: '/**'
         destination: /index.html
-
-databases:
-  - name: crypto-db
-    plan: free
-    databaseName: crypto_db
-    user: crypto_user
+    autoDeploy: false
