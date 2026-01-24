@@ -46,18 +46,18 @@ databases:
 # HOWEVER, let's try 'staticSites' one last time with correct indentation.
 # If this fails, we will convert frontend to a 'web' service serving static files.
 
-staticSites:
-  - name: crypto-frontend
+  # 3. Frontend Service (Converted to Web Service to bypass Blueprint Spec issue)
+  - type: web
+    name: crypto-frontend
+    env: node
     buildCommand: 'cd frontend && npm install && npm run build'
-    publishPath: frontend/out
+    # Use npx serve to serve the static 'out' directory on port 10000 (or $PORT)
+    startCommand: 'cd frontend && npx serve@latest out -p $PORT -s'
+    plan: free
     envVars:
       - key: NEXT_PUBLIC_API_URL
         fromService:
           type: web
           name: crypto-backend
           property: host
-    routes:
-      - type: rewrite
-        source: '/**'
-        destination: /index.html
     autoDeploy: false
