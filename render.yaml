@@ -15,48 +15,9 @@ services:
       - key: RENDER
         value: true
     plan: free
-    autoDeploy: false
+    autoDeploy: true
 
-  # 2. Frontend Service (Next.js Static Site)
-  - type: static
-    name: crypto-frontend
-    env: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/out
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: crypto-backend
-          property: host
-      # We need to prepend https:// because 'host' only gives domain.com
-      # However, Render blueprints don't support formatString deeply in all contexts.
-      # The safest way for a web service is to trust that 'host' is the domain.
-      # BUT, since we need the full URL, we usually need 'url'. 
-      # Since Render says 'url' is invalid (it was deprecated or context specific), 
-      # we will use 'host' but we might need to update the app to handle missing protocol 
-      # OR just manual override? 
-      # Wait, Render documentation says: "host" is just the hostname.
-      # Let's use 'host' and assume we can fix the protocol in code OR use a transform if available.
-      # Actually, let's fix the FRONTEND code to tolerate a missing 'https://' or 
-      # better yet: standard Render blueprints DO support this construction: "https://{host}".
-      # But Render.yaml syntax for that is specific.
-      
-      # Let's try simply using 'host' here, but constructing the full URL inside the app code 
-      # often complicates things.
-      # The error explicitly lists valid properties: connectionString, host, hostport, port.
-      # So 'url' is definitely out.
-      
-      # Let's use 'host'. We will update the code to Prepend 'https://' if missing.
-
-    routes:
-      - type: rewrite
-        source: /**
-        destination: /index.html
-    plan: free
-    autoDeploy: false
-
-  # 3. Trading Engine (Python Background Worker -> Web Service for Free Tier)
+  # 3. Trading Engine (Python Web Service for Free Tier)
   - type: web
     name: crypto-engine
     env: docker
@@ -71,25 +32,27 @@ services:
       - key: PORT
         value: 10000
     plan: free
-    autoDeploy: false
+    autoDeploy: true
+
+staticSites:
+  # 2. Frontend Service (Next.js Static Site)
+  - name: crypto-frontend
+    buildCommand: cd frontend && npm install && npm run build
+    publishPath: ./frontend/out
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: crypto-backend
+          property: host
+    routes:
+      - type: rewrite
+        source: /**
+        destination: /index.html
+    autoDeploy: true
 
 databases:
   - name: crypto-db
     plan: free
     databaseName: crypto_db
     user: crypto_user
-
-# Link Database to Backend
-# Note: Render Blueprints (render.yaml) automatically inject DATABASE_URL into services 
-# that have a 'database' property linked, or we can explicitly set it.
-# To link, we add 'region' and 'plan' consistency.
-# But explicitly:
-# We need to add the database link to the backend service above.
-
-# Corrected Linkage:
-# Add this to the backend service in the 'services' list:
-#   envVars:
-#     - key: DATABASE_URL
-#       fromDatabase:
-#         name: crypto-db
-#         property: connectionString
