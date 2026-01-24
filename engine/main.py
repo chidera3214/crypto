@@ -17,6 +17,17 @@ if not RAW_HOST.startswith("http"):
     BASE_URL = f"https://{RAW_HOST}" if "localhost" not in RAW_HOST else f"http://{RAW_HOST}"
 else:
     BASE_URL = RAW_HOST
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# Email Configuration (Environment Variables Recommended)
+# If not set, email sending will be skipped.
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+EMAIL_TO = os.getenv("EMAIL_TO", "")
 
 BACKEND_URL = f"{BASE_URL}/signal"
 SYMBOL = "BTCUSDT"
@@ -166,12 +177,53 @@ def analyze_market(data, timeframe):
         }
     return None
 
+def send_email(signal):
+    if not SMTP_USER or not SMTP_PASS or not EMAIL_TO:
+        print("   [INFO] Email configuration missing, skipping notification.")
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USER
+        msg['To'] = EMAIL_TO
+        msg['Subject'] = f"AlphaScanner Signal: {signal['type']} {signal['symbol']} ({signal['timeframe']})"
+
+        body = f"""
+        AlphaScanner Signal Alert
+        -------------------------
+        Type: {signal['type']}
+        Symbol: {signal['symbol']}
+        Timeframe: {signal['timeframe']}
+        Price: {signal['price']}
+        
+        Reason: {signal['reason']}
+        
+        Setup:
+        - Stop Loss: {signal['setup_zones']['stop_loss']:.2f}
+        - Take Profit: {signal['setup_zones']['take_profit']:.2f}
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASS)
+        text = msg.as_string()
+        server.sendmail(SMTP_USER, EMAIL_TO, text)
+        server.quit()
+        print(f"   [SUCCESS] Email sent to {EMAIL_TO}")
+    except Exception as e:
+        print(f"   [ERROR] Failed to send email: {e}")
+
 def send_signal(signal):
+    # 1. Send to Backend
     try:
         requests.post(BACKEND_URL, json=signal)
         print(f"   [SUCCESS] Signal Sent: {signal['type']} {signal['symbol']} ({signal['timeframe']})")
     except Exception as e:
         print(f"   [ERROR] Failed to send signal: {e}")
+
+    # 2. Send Email Notification
+    send_email(signal)
 
 def run_scanner():
     print(f"Starting AlphaScanner [M15, H4]...")
