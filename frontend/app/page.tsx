@@ -12,7 +12,7 @@ export default function Home() {
   const { connected, latestSignal, signals, takenSignalIds } = useSignal();
   const [stats, setStats] = useState({ win_rate: 68, avg_rr: 2.5, total_signals: 0 });
   const [autoExecute, setAutoExecute] = useState(false);
-  const [timeframeFilter, setTimeframeFilter] = useState<'ALL' | '15m' | '4h'>('ALL');
+  const [timeframeFilter, setTimeframeFilter] = useState<'ALL' | '1m' | '5m' | '15m' | '4h'>('ALL');
 
   useEffect(() => {
     // Fetch Stats
@@ -95,7 +95,7 @@ export default function Home() {
 
               {/* Timeframe Filter Tabs */}
               <div className="flex p-1 bg-zinc-900/80 border border-zinc-800 rounded-lg">
-                {(['ALL', '15m', '4h'] as const).map((tf) => (
+                {(['ALL', '1m', '5m', '15m', '4h'] as const).map((tf) => (
                   <button
                     key={tf}
                     onClick={() => setTimeframeFilter(tf)}
@@ -166,6 +166,10 @@ export default function Home() {
             <div className="p-6 rounded-2xl bg-zinc-900/50 border border-zinc-800">
               <h3 className="text-lg font-medium mb-4">Active Modes</h3>
               <div className="space-y-2">
+                <div className="flex items-center gap-3 p-2 bg-zinc-900/50 rounded-lg">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                  <span className="text-sm text-zinc-300">Scalp: BB + RSI (1m)</span>
+                </div>
                 <div className="flex items-center gap-3 p-2 bg-zinc-900/50 rounded-lg">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                   <span className="text-sm text-zinc-300">BB + RSI + MACD (15m)</span>
