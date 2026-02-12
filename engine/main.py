@@ -328,19 +328,35 @@ def run_scanner():
     last_processed = {}
     
     while True:
-        for tf in TIMEFRAMES:
-            # print(f"Checking {tf}...")
-            data = fetch_candles(tf)
-            if data:
-                signal = analyze_market_dispatch(data, tf)
-                if signal:
-                    last_ts = last_processed.get(tf, 0)
-                    current_ts = signal['timestamp']
+        try:
+            for tf in TIMEFRAMES:
+                # print(f"Checking {tf}...")
+                data = fetch_candles(tf)
+                
+                if data:
+                    try:
+                        signal = analyze_market_dispatch(data, tf)
+                        if signal:
+                            last_ts = last_processed.get(tf, 0)
+                            current_ts = signal['timestamp']
+                            
+                            if current_ts - last_ts > 60: 
+                                send_signal(signal)
+                                last_processed[tf] = current_ts
+                    except Exception as loop_err:
+                        print(f"   [ERROR] Analysis failed for {tf}: {loop_err}")
                     
-                    if current_ts - last_ts > 60: 
-                        send_signal(signal)
-                        last_processed[tf] = current_ts
-            time.sleep(1)
+                    # Explicit Memory Cleanup
+                    del data
+                
+                time.sleep(1)
+        except Exception as e:
+            print(f"   [CRITICAL] Scanner loop error: {e}")
+            time.sleep(5)
+            
+        import gc
+        gc.collect() # Force garbage collection
+        time.sleep(10) # Scan loop delay
             
         time.sleep(10) # Scan loop delay
 

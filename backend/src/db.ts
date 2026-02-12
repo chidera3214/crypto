@@ -9,7 +9,7 @@ let isPostgres = false;
 
 export const initDB = async () => {
   try {
-    if (process.env.DATABASE_URL) {
+    if (process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('postgres') || process.env.DATABASE_URL.startsWith('postgresql'))) {
       // PostgreSQL Mode (Render)
       console.log('[DB] Detected DATABASE_URL. Switching to PostgreSQL mode.');
       isPostgres = true;
