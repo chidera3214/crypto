@@ -26,29 +26,58 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 EMAIL_TO = os.getenv("EMAIL_TO", "")
-
+ 
 BACKEND_URL = f"{BASE_URL}/signal"
-SYMBOL = "BTCUSDT"
+ 
+# Asset Configuration
+# Maps Display Symbol -> API Symbol (Binance Spot or Futures)
+ASSETS = {
+    # Using COIN-Margined Futures for BTC/USD (Quoted in USD)
+    "BTCUSD": {"api_symbol": "BTCUSD_PERP", "strategy": "btc_standard", "source": "futures_coin_m"},
+    # Using USDT-Margined Futures for Gold (Proxy for XAU/USD)
+    "XAUUSD": {"api_symbol": "XAUUSDT", "strategy": "gold_scalp", "source": "futures_usdt"} 
+}
+
+
 TIMEFRAMES = ["1m", "15m", "4h"]
 LIMIT = 500
 
-# Rotational Endpoints for Binance
-BINANCE_ENDPOINTS = [
+# Endpoint Configuration
+# Endpoint Configuration
+BINANCE_SPOT = [
     "https://api.binance.com/api/v3/klines",
-    "https://api1.binance.com/api/v3/klines",
-    "https://api2.binance.com/api/v3/klines",
-    "https://api3.binance.com/api/v3/klines",
     "https://data-api.binance.vision/api/v3/klines"
 ]
 
-def fetch_candles(timeframe, limit=LIMIT):
+BINANCE_FUTURES_USDT = [ # USDT-Margined (fapi)
+    "https://fapi.binance.com/fapi/v1/klines"
+]
+
+BINANCE_FUTURES_COIN = [ # COIN-Margined (dapi) - Quoted in USD
+    "https://dapi.binance.com/dapi/v1/klines"
+]
+
+def fetch_candles(symbol, timeframe, limit=LIMIT):
+    # Resolve Configuration
+    config = ASSETS.get(symbol, {})
+    api_symbol = config.get("api_symbol", symbol)
+    source = config.get("source", "spot")
+    
+    # Select Endpoints
+    if source == "futures_usdt":
+        endpoints = BINANCE_FUTURES_USDT
+    elif source == "futures_coin_m":
+        endpoints = BINANCE_FUTURES_COIN
+    else:
+        endpoints = BINANCE_SPOT
+    
     params = {
-        "symbol": SYMBOL,
+        "symbol": api_symbol,
         "interval": timeframe,
         "limit": limit
     }
     
-    for url in BINANCE_ENDPOINTS:
+    for url in endpoints:
         try:
             response = requests.get(url, params=params, timeout=5)
             # response.raise_for_status()
@@ -65,11 +94,8 @@ def fetch_candles(timeframe, limit=LIMIT):
             continue
     return None
 
-# --- 1M SCALPING STRATEGY ---
+# --- STRATEGY HELPERS ---
 def get_candle_pattern(opens, highs, lows, closes):
-    # Check for multiple patterns using TA-Lib
-    # Returns (pattern_name, value) where value is 100 (Bullish), -100 (Bearish), or 0
-    
     patterns = {
         "Engulfing": talib.CDLENGULFING,
         "Hammer": talib.CDLHAMMER,
@@ -84,7 +110,6 @@ def get_candle_pattern(opens, highs, lows, closes):
     }
     
     idx = -2 # Check the last COMPLETED candle
-    
     detected_patterns = []
     
     for name, func in patterns.items():
@@ -95,135 +120,237 @@ def get_candle_pattern(opens, highs, lows, closes):
             
     return detected_patterns
 
-def analyze_1m_strategy(data_1m):
-    # Step A: The Alignment (Check 5m and 1h) using 200 EMA
-    # Fetch sufficient data
-    data_5m = fetch_candles("5m", limit=300)
-    data_1h = fetch_candles("1h", limit=300)
+# --- BTC STRATEGY (EMA Crossover + Trend) ---
+def analyze_btc_strategy(symbol, data_1m):
+    # Step A: Higher Timeframe Trend Filter (H1 & M5 200 EMA)
+    data_5m = fetch_candles(symbol, "5m", limit=300)
+    data_1h = fetch_candles(symbol, "1h", limit=300)
     
     if not data_5m or not data_1h:
         return None 
         
-    # Calculate 200 EMAs
-    closes_1h = data_1h["close"]
-    if len(closes_1h) < 200: return None
-    ema200_1h = talib.EMA(closes_1h, timeperiod=200)
+    ema200_1h = talib.EMA(data_1h["close"], timeperiod=200)
+    ema200_5m = talib.EMA(data_5m["close"], timeperiod=200)
     
-    closes_5m = data_5m["close"]
-    if len(closes_5m) < 200: return None
-    ema200_5m = talib.EMA(closes_5m, timeperiod=200)
+    price_1h = data_1h["close"][-1]
+    price_5m = data_5m["close"][-1]
     
-    # Check Trend Alignment
-    price_1h = closes_1h[-1]
-    price_5m = closes_5m[-1]
+    # 1. Global Trend Direction
+    trend_bullish = (price_1h > ema200_1h[-1]) and (price_5m > ema200_5m[-1])
+    trend_bearish = (price_1h < ema200_1h[-1]) and (price_5m < ema200_5m[-1])
     
-    # UP TREND: Price > 200 EMA on BOTH 1H and 5M
-    up_trend_aligned = (price_1h > ema200_1h[-1]) and (price_5m > ema200_5m[-1])
-    
-    # DOWN TREND: Price < 200 EMA on BOTH 1H and 5M
-    down_trend_aligned = (price_1h < ema200_1h[-1]) and (price_5m < ema200_5m[-1])
-    
-    if not up_trend_aligned and not down_trend_aligned:
-        return None # Middle of nowhere
-
-    # Step B & C: Detect ANY Candlestick Pattern matches the Trend
-    
-    closes = data_1m["close"]
-    highs = data_1m["high"]
-    lows = data_1m["low"]
-    opens = data_1m["open"]
-    
-    if len(closes) < 100: return None
-
-    # Get patterns on the last closed candle
-    found_patterns = get_candle_pattern(opens, highs, lows, closes)
-    
-    if not found_patterns:
+    if not trend_bullish and not trend_bearish:
         return None
-        
+
+    # Step B: M1 Timeframe Triggers (50 & 100 EMA Crossover)
+    closes_1m = data_1m["close"]
+    
+    if len(closes_1m) < 100: return None
+    
+    ema50_1m = talib.EMA(closes_1m, timeperiod=50)
+    ema100_1m = talib.EMA(closes_1m, timeperiod=100)
+    
+    # Check crossover on the last completed candle (idx = -2)
+    # Crossover happened if:
+    # Bullish: Previous (idx-3) EMA50 <= EMA100 AND Current (idx-2) EMA50 > EMA100
+    # Bearish: Previous (idx-3) EMA50 >= EMA100 AND Current (idx-2) EMA50 < EMA100
+    
+    idx_curr = -2
+    idx_prev = -3
+    
+    ema50_curr = ema50_1m[idx_curr]
+    ema100_curr = ema100_1m[idx_curr]
+    ema50_prev = ema50_1m[idx_prev]
+    ema100_prev = ema100_1m[idx_prev]
+    
     signal_type = None
     reason = ""
     stop_loss = 0
     take_profit = 0
     entry_price = 0
     
-    idx = -2 # Last closed candle index
-    current_close = closes[idx]
-    current_high = highs[idx]
-    current_low = lows[idx]
-    
-    # --- BUY SCENARIO (UP TREND) ---
-    if up_trend_aligned:
-        # Look for Bullish Patterns (value > 0)
-        for name, val in found_patterns:
-            if val > 0: # Bullish signal from TA-Lib
-                signal_type = "BUY"
-                buffer = 2.0
-                entry_price = current_high + buffer
-                stop_loss = current_low - buffer
-                risk = entry_price - stop_loss
-                take_profit = entry_price + (risk * 1.5)
-                reason = f"[1m Scalping] GLOBAL UPTREND + Pattern: {name}"
-                break 
+    # Legacy Buffer for SL/TP
+    buffer = 2.0 
+    current_close = closes_1m[idx_curr]
 
-    # --- SELL SCENARIO (DOWN TREND) ---
-    elif down_trend_aligned:
-        # Look for Bearish Patterns (value < 0)
-        for name, val in found_patterns:
-            if val < 0: # Bearish signal from TA-Lib
-                signal_type = "SELL"
-                buffer = 2.0
-                entry_price = current_low - buffer
-                stop_loss = current_high + buffer
-                risk = stop_loss - entry_price
-                take_profit = entry_price - (risk * 1.5)
-                reason = f"[1m Scalping] GLOBAL DOWNTREND + Pattern: {name}"
-                break
+    # --- BUY SIGNAL ---
+    # Global Trend UP + M1 EMA 50 crosses ABOVE M1 EMA 100
+    if trend_bullish:
+        if (ema50_prev <= ema100_prev) and (ema50_curr > ema100_curr):
+            signal_type = "BUY"
+            entry_price = current_close
+            stop_loss = entry_price - buffer
+            risk = entry_price - stop_loss
+            take_profit = entry_price + (risk * 1.5)
+            reason = "[BTC M1] Global Uptrend + 1m EMA 50/100 Bullish Cross"
+
+    # --- SELL SIGNAL ---
+    # Global Trend DOWN + M1 EMA 50 crosses BELOW M1 EMA 100
+    elif trend_bearish:
+        if (ema50_prev >= ema100_prev) and (ema50_curr < ema100_curr):
+            signal_type = "SELL"
+            entry_price = current_close
+            stop_loss = entry_price + buffer
+            risk = stop_loss - entry_price
+            take_profit = entry_price - (risk * 1.5)
+            reason = "[BTC M1] Global Downtrend + 1m EMA 50/100 Bearish Cross"
 
     if signal_type:
         return {
-            "symbol": SYMBOL,
+            "symbol": symbol,
             "timeframe": "1m",
             "type": signal_type,
             "timestamp": time.time(),
-            "price": closes[-1],
+            "price": closes_1m[-1],
             "setup_zones": {
                 "entry_zone": { "high": entry_price, "low": entry_price },
                 "stop_loss": stop_loss,
                 "take_profit": take_profit
             },
             "reason": reason,
-            "context_candles": [
-                {"time": int(data_1m["time"][i] / 1000), "open": data_1m["open"][i], "high": data_1m["high"][i], "low": data_1m["low"][i], "close": data_1m["close"][i]}
-                for i in range(max(0, len(data_1m["time"])-50), len(data_1m["time"]))
-            ]
+            "context_candles": build_context(data_1m)
         }
-        
     return None
 
-def analyze_market_general(data, timeframe):
+# --- GOLD STRATEGY (Sweep & Shift) ---
+def analyze_gold_strategy(symbol, data_1m):
+    # PRE-REQUISITE: 1. Trend Alignment (H1 + M5 200 EMA)
+    data_5m = fetch_candles(symbol, "5m", limit=300)
+    data_1h = fetch_candles(symbol, "1h", limit=300)
+    
+    if not data_5m or not data_1h:
+        return None 
+        
+    ema200_1h = talib.EMA(data_1h["close"], timeperiod=200)
+    ema200_5m = talib.EMA(data_5m["close"], timeperiod=200)
+    
+    price_1h = data_1h["close"][-1]
+    price_5m = data_5m["close"][-1]
+    
+    # Determine Bias
+    bias_bullish = (price_1h > ema200_1h[-1]) and (price_5m > ema200_5m[-1])
+    bias_bearish = (price_1h < ema200_1h[-1]) and (price_5m < ema200_5m[-1])
+    
+    if not bias_bullish and not bias_bearish:
+        return None
+
+    # PRE-REQUISITE: 3. Risk Management (ATR Calc)
+    closes_1m = data_1m["close"]
+    highs_1m = data_1m["high"]
+    lows_1m = data_1m["low"]
+    
+    atr_1m = talib.ATR(highs_1m, lows_1m, closes_1m, timeperiod=14)
+    current_atr = atr_1m[-2] # Last closed candle ATR
+    
+    # TRIGGER LOGIC: Sweep & Shift
+    # Look back at last 3 candles for the "Sweep" event followed by "Shift"
+    
+    # Define Recent M5 High/Low for Sweep Targets
+    # We look at last 10 5m candles (approx 50 mins)
+    m5_highs = data_5m["high"][-15:-1] # Exclude current forming
+    m5_lows = data_5m["low"][-15:-1]
+    recent_liq_high = np.max(m5_highs)
+    recent_liq_low = np.min(m5_lows)
+    
+    # We examine the last CLOSED 1m candle (idx=-2)
+    # Did it sweep? Or did the one before it (idx=-3) sweep?
+    # We want a "Shift" (strong move) right now.
+    
+    idx = -2
+    curr_close = closes_1m[idx]
+    curr_open = opens_1m[idx]
+    curr_high = highs_1m[idx]
+    curr_low = lows_1m[idx]
+    
+    # Body Size for "Displacement" check
+    body_size = abs(curr_close - curr_open)
+    is_displacement = body_size > (current_atr * 1.0) # Strong body
+    
+    signal_type = None
+    reason = ""
+    stop_loss = 0
+    take_profit = 0
+    entry_price = 0
+    
+    # --- BUY SETUP (Sweep Low + Bullish Shift) ---
+    if bias_bullish:
+        # Check if recent candles swept the liquidity low
+        # Look at candles -2 or -3
+        swept_low = (lows_1m[-2] < recent_liq_low) or (lows_1m[-3] < recent_liq_low)
+        
+        # Check for Shift: Strong Green Candle closing ABOVE the sweep/range
+        # Current candle (idx -2) must be Green and Strong
+        is_green = curr_close > curr_open
+        
+        if swept_low and is_green and is_displacement:
+            signal_type = "BUY"
+            # Entry: Retest of this candle's body or high (Aggressive)
+            entry_price = curr_close 
+            
+            # SL: 1.5 ATR below the sweep Wick
+            sweep_wick = min(lows_1m[-2], lows_1m[-3])
+            sl_padding = 1.5 * current_atr
+            stop_loss = sweep_wick - sl_padding
+            
+            risk = entry_price - stop_loss
+            take_profit = entry_price + (risk * 2.0) # 2R target
+            reason = "[Gold Scalp] Liquidity Sweep (Low) + Bullish Displacement"
+
+    # --- SELL SETUP (Sweep High + Bearish Shift) ---
+    elif bias_bearish:
+        # Check if recent candles swept high
+        swept_high = (highs_1m[-2] > recent_liq_high) or (highs_1m[-3] > recent_liq_high)
+        
+        # Check for Shift: Strong Red Candle
+        is_red = curr_close < curr_open
+        
+        if swept_high and is_red and is_displacement:
+            signal_type = "SELL"
+            # Entry on Close
+            entry_price = curr_close
+            
+            # SL: 1.5 ATR above the sweep Wick
+            sweep_wick = max(highs_1m[-2], highs_1m[-3])
+            sl_padding = 1.5 * current_atr
+            stop_loss = sweep_wick + sl_padding
+            
+            risk = stop_loss - entry_price
+            take_profit = entry_price - (risk * 2.0) # 2R target
+            reason = "[Gold Scalp] Liquidity Sweep (High) + Bearish Displacement"
+
+    if signal_type:
+        return {
+            "symbol": symbol,
+            "timeframe": "1m",
+            "type": signal_type,
+            "timestamp": time.time(),
+            "price": closes_1m[-1],
+            "setup_zones": {
+                "entry_zone": { "high": entry_price, "low": entry_price },
+                "stop_loss": stop_loss,
+                "take_profit": take_profit
+            },
+            "reason": reason,
+            "context_candles": build_context(data_1m)
+        }
+    return None
+
+def analyze_market_general(symbol, data, timeframe):
     closes = data["close"]
     highs = data["high"]
     lows = data["low"]
     
-    # 1. Bollinger Bands (20, 2)
     upper, middle, lower = talib.BBANDS(closes, timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
-    # 2. RSI (14)
     rsi = talib.RSI(closes, timeperiod=14)
-    # 3. MACD (12, 26, 9)
     macd, macd_signal, macd_hist = talib.MACD(closes, fastperiod=12, slowperiod=26, signalperiod=9)
     
     idx = -2 
-    
-    current_price = closes[idx]
     current_rsi = rsi[idx]
     prev_rsi = rsi[idx-1]
-    
     current_macd = macd[idx]
     current_signal = macd_signal[idx]
     prev_macd = macd[idx-1]
     prev_signal = macd_signal[idx-1]
-    
     current_lower = lower[idx]
     current_upper = upper[idx]
     
@@ -232,21 +359,14 @@ def analyze_market_general(data, timeframe):
 
     macd_bullish_cross = (prev_macd <= prev_signal) and (current_macd > current_signal)
     macd_bearish_cross = (prev_macd >= prev_signal) and (current_macd < current_signal)
-    
     start_pointing_up = current_rsi > prev_rsi
     start_pointing_down = current_rsi < prev_rsi
 
-    # BUY Logic
-    if (lows[idx] <= current_lower) and \
-       (current_rsi < 30 or prev_rsi < 30) and start_pointing_up and \
-       macd_bullish_cross:
+    if (lows[idx] <= current_lower) and (current_rsi < 30 or prev_rsi < 30) and start_pointing_up and macd_bullish_cross:
         signal_type = "BUY"
         reason = f"[{timeframe}] Lower BB Touch + RSI Oversold + MACD Bull Cross"
 
-    # SELL Logic
-    elif (highs[idx] >= current_upper) and \
-         (current_rsi > 70 or prev_rsi > 70) and start_pointing_down and \
-         macd_bearish_cross:
+    elif (highs[idx] >= current_upper) and (current_rsi > 70 or prev_rsi > 70) and start_pointing_down and macd_bearish_cross:
         signal_type = "SELL"
         reason = f"[{timeframe}] Upper BB Touch + RSI Overbought + MACD Bear Cross"
 
@@ -257,7 +377,7 @@ def analyze_market_general(data, timeframe):
         tp = current_upper if signal_type == "BUY" else current_lower
         
         return {
-            "symbol": f"{SYMBOL}",
+            "symbol": symbol,
             "timeframe": timeframe,
             "type": signal_type,
             "timestamp": time.time(),
@@ -268,18 +388,30 @@ def analyze_market_general(data, timeframe):
                 "take_profit": tp
             },
             "reason": reason,
-            "context_candles": [
-                {"time": int(data["time"][i] / 1000), "open": data["open"][i], "high": data["high"][i], "low": data["low"][i], "close": data["close"][i]}
-                for i in range(max(0, len(data["time"])-100), len(data["time"]))
-            ]
+            "context_candles": build_context(data)
         }
     return None
 
-def analyze_market_dispatch(data, timeframe):
+def build_context(data):
+    return [
+        {"time": int(data["time"][i] / 1000), "open": data["open"][i], "high": data["high"][i], "low": data["low"][i], "close": data["close"][i]}
+        for i in range(max(0, len(data["time"])-50), len(data["time"]))
+    ]
+
+def analyze_market_dispatch(symbol, data, timeframe):
+    # Strategy Router
+    strategy_name = ASSETS.get(symbol, {}).get("strategy", "market_general")
+    
     if timeframe == "1m":
-        return analyze_1m_strategy(data)
+        if strategy_name == "gold_scalp":
+            return analyze_gold_strategy(symbol, data)
+        elif strategy_name == "btc_standard":
+            return analyze_btc_strategy(symbol, data)
+        else:
+            return analyze_market_general(symbol, data, timeframe)
     else:
-        return analyze_market_general(data, timeframe)
+        # Default Higher Timeframe Strategy for all
+        return analyze_market_general(symbol, data, timeframe)
 
 def send_email(signal):
     if not SMTP_USER or not SMTP_PASS or not EMAIL_TO:
@@ -324,43 +456,45 @@ def send_signal(signal):
     send_email(signal)
 
 def run_scanner():
-    print(f"Starting AlphaScanner [1m, 15m, 4h]...")
-    last_processed = {}
+    print(f"Starting AlphaScanner [BTC: Standard | GOLD: Scalp]...")
+    last_processed = {} # Key: symbol_timeframe
     
     while True:
         try:
-            for tf in TIMEFRAMES:
-                # print(f"Checking {tf}...")
-                data = fetch_candles(tf)
-                
-                if data:
-                    try:
-                        signal = analyze_market_dispatch(data, tf)
-                        if signal:
-                            last_ts = last_processed.get(tf, 0)
-                            current_ts = signal['timestamp']
-                            
-                            if current_ts - last_ts > 60: 
-                                send_signal(signal)
-                                last_processed[tf] = current_ts
-                    except Exception as loop_err:
-                        print(f"   [ERROR] Analysis failed for {tf}: {loop_err}")
+            for symbol in ASSETS.keys():
+                for tf in TIMEFRAMES:
+                    # Optimization: Only run specific timeframes for specific strategies
+                    strategy = ASSETS[symbol]['strategy']
                     
-                    # Explicit Memory Cleanup
-                    del data
-                
-                time.sleep(1)
+                    if strategy in ['btc_standard', 'gold_scalp'] and tf != '1m':
+                        continue
+                        
+                    data = fetch_candles(symbol, tf)
+                    if data:
+                        try:
+                            signal = analyze_market_dispatch(symbol, data, tf)
+                            if signal:
+                                key = f"{symbol}_{tf}"
+                                last_ts = last_processed.get(key, 0)
+                                current_ts = signal['timestamp']
+                                
+                                # 60s cooldown per symbol/tf
+                                if current_ts - last_ts > 60: 
+                                    send_signal(signal)
+                                    last_processed[key] = current_ts
+                        except Exception as loop_err:
+                            print(f"   [ERROR] Analysis failed for {symbol} {tf}: {loop_err}")
+                        
+                        del data
+                    time.sleep(0.5)
         except Exception as e:
             print(f"   [CRITICAL] Scanner loop error: {e}")
             time.sleep(5)
             
         import gc
-        gc.collect() # Force garbage collection
-        time.sleep(10) # Scan loop delay
-            
-        time.sleep(10) # Scan loop delay
+        gc.collect() 
+        time.sleep(10) 
 
-# Flask App for Render Health Check
 app = Flask(__name__)
 
 @app.route('/health')

@@ -167,16 +167,16 @@ export default function Home() {
               <h3 className="text-lg font-medium mb-4">Active Modes</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-3 p-2 bg-zinc-900/50 rounded-lg">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  <span className="text-sm text-zinc-300">Scalp: BB + RSI (1m)</span>
+                  <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
+                  <span className="text-sm text-zinc-300">Gold: Sweep & Shift (1m)</span>
                 </div>
                 <div className="flex items-center gap-3 p-2 bg-zinc-900/50 rounded-lg">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  <span className="text-sm text-zinc-300">BB + RSI + MACD (15m)</span>
+                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
+                  <span className="text-sm text-zinc-300">BTC: Trend Standard (1m)</span>
                 </div>
                 <div className="flex items-center gap-3 p-2 bg-zinc-900/50 rounded-lg">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  <span className="text-sm text-zinc-300">BB + RSI + MACD (4h)</span>
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+                  <span className="text-sm text-zinc-300">General: BB + RSI (15m/4h)</span>
                 </div>
               </div>
             </div>
