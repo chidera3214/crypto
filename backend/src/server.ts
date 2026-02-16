@@ -24,9 +24,14 @@ const PORT = process.env.PORT || 4000;
 // Initialize DB
 initDB();
 
-// Health Check
+// Health Check (lightweight, no DB)
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Keep-Alive Pulse (ultra-simple, zero dependencies — use this for external pingers)
+app.get('/pulse', (req: Request, res: Response) => {
+  res.status(200).send('ok');
 });
 
 app.get('/', (req: Request, res: Response) => {

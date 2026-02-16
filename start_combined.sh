@@ -5,44 +5,64 @@ set -e
 # If not set, default to 3000
 PUBLIC_PORT="${PORT:-3000}"
 
-echo "Starting Combined Service..."
+echo "Starting Combined Service (Optimized for 512MB RAM)..."
 echo "Public Port (Backend): $PUBLIC_PORT"
 
-# Start Backend
-# We run the backend on the public PORT
+# Global PID variables
+BACKEND_PID=""
+ENGINE_PID=""
+
+# Function to handle shutdown
+cleanup() {
+    echo "Container shutting down. Killing child processes..."
+    # Kill both processes if they exist
+    if [ -n "$BACKEND_PID" ]; then kill $BACKEND_PID 2>/dev/null || true; fi
+    if [ -n "$ENGINE_PID" ]; then kill $ENGINE_PID 2>/dev/null || true; fi
+    exit
+}
+
+# Trap signals for graceful shutdown
+trap cleanup SIGINT SIGTERM EXIT
+
+# --- Start Backend ---
 echo "Starting Backend..."
 cd /app/backend
 # Pass the PUBLIC_PORT to the backend
 export PORT=$PUBLIC_PORT
-# Optimize Node memory for small containers (limit heap to 256MB to leave room for Python)
-export NODE_OPTIONS="--max-old-space-size=256"
+# Optimize Node memory: 
+# Limit max old space size to 200MB (leaves ~300MB for Python + OS overhead)
+export NODE_OPTIONS="--max-old-space-size=200"
 npm run start &
 BACKEND_PID=$!
 
-# Wait for backend to be ready
+# Wait briefly for backend to initialize
 echo "Waiting for backend to initialize..."
 sleep 5
 
-# Start Engine
-# The engine needs its own internal port for health checks (if any)
-# But crucially, it needs to know where the BACKEND is.
+# --- Start Engine ---
 echo "Starting Engine..."
 cd /app/engine
-# Engine's internal port (for its own Flask health check)
+# Engine's internal port
 export PORT=10000        
-# Correctly point to the backend on the PUBLIC_PORT
+# Point to backend
 export BACKEND_URL="http://127.0.0.1:$PUBLIC_PORT" 
-# Use unbuffered output for Python
-python3 -u main.py &
-ENGINE_PID=$!
+# Python Memory Optimizations for Low-RAM Containers:
+# MALLOC_ARENA_MAX=2: Reduces memory fragmentation/bloat in glibc (Crucial for Python in containers)
+export MALLOC_ARENA_MAX=2
+# PYTHONUNBUFFERED=1: Ensures logs appear immediately
+export PYTHONUNBUFFERED=1
 
-# Trap signals to kill both
-trap "kill $BACKEND_PID $ENGINE_PID; exit" SIGINT SIGTERM
+python3 main.py &
+ENGINE_PID=$!
 
 echo "Services running."
 echo "Backend PID: $BACKEND_PID (Port $PUBLIC_PORT)"
 echo "Engine PID: $ENGINE_PID (Internal Port 10000)"
-echo "Engine connecting to Backend at: $BACKEND_URL"
 
-# Wait for any process to exit
+# Wait for *any* process to exit. 
+# If one acts up or crashes, 'wait -n' returns, and the script continues to exit (triggering cleanup).
 wait -n
+
+echo "A service has stopped unexpectedly. Shutting down container to allow restart..."
+# The trap on EXIT will handle the kill commands
+exit 1
