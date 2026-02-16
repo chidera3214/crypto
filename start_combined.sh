@@ -42,8 +42,9 @@ sleep 5
 # --- Start Engine ---
 echo "Starting Engine..."
 cd /app/engine
-# Engine's internal port
-export PORT=10000        
+# Engine's internal port (must be different from Backend's port to avoid conflict)
+export ENGINE_PORT=5001
+export PORT=$ENGINE_PORT
 # Point to backend
 export BACKEND_URL="http://127.0.0.1:$PUBLIC_PORT" 
 # Python Memory Optimizations for Low-RAM Containers:
@@ -57,7 +58,7 @@ ENGINE_PID=$!
 
 echo "Services running."
 echo "Backend PID: $BACKEND_PID (Port $PUBLIC_PORT)"
-echo "Engine PID: $ENGINE_PID (Internal Port 10000)"
+echo "Engine PID: $ENGINE_PID (Internal Port $ENGINE_PORT)"
 
 # Wait for *any* process to exit. 
 # If one acts up or crashes, 'wait -n' returns, and the script continues to exit (triggering cleanup).
