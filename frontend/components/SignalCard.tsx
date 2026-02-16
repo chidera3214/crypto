@@ -191,8 +191,7 @@ export const SignalCard: React.FC<SignalCardProps> = ({ signal }) => {
                     <div>
                       <span className="text-[10px] text-zinc-500 block uppercase font-bold">Lot Size</span>
                       <span className="text-sm font-mono text-blue-400 font-bold">
-                        {lotSize < 0.00001 ? "Dust" : lotSize.toFixed(6)} <span className="text-[10px] font-normal opacity-70 italic">{signal.symbol?.split('USD')[0] || 'Units'}</span>
-
+                        {lotSize < 0.00001 ? "Dust" : lotSize.toFixed(6)} <span className="text-[10px] font-normal opacity-70 italic">BTC</span>
                       </span>
                     </div>
                     <div className="text-right">
