@@ -38,6 +38,46 @@ app.get('/', (req: Request, res: Response) => {
   res.send('AlphaScanner API Hub is running. Visit http://localhost:3000 for the Dashboard.');
 });
 
+// Price Proxy Endpoint — fetches live price from Binance server-side
+// (Binance domains are DNS-blocked in some regions, so the frontend proxies through here)
+const priceCache: Record<string, { price: string; timestamp: number }> = {};
+const CACHE_TTL_MS = 2000; // Cache prices for 2 seconds
+
+app.get('/price/:symbol', async (req: Request, res: Response) => {
+  const symbol = req.params.symbol.toUpperCase();
+
+  // Return cached price if still fresh
+  const cached = priceCache[symbol];
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    res.json({ symbol, price: cached.price });
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
+    );
+
+    if (!response.ok) {
+      res.status(response.status).json({ error: `Binance API error: ${response.status}` });
+      return;
+    }
+
+    const data = await response.json();
+    // Update cache
+    priceCache[symbol] = { price: data.price, timestamp: Date.now() };
+    res.json({ symbol, price: data.price });
+  } catch (e) {
+    console.error(`Failed to fetch price for ${symbol}:`, e);
+    // Return stale cache if available
+    if (cached) {
+      res.json({ symbol, price: cached.price, stale: true });
+    } else {
+      res.status(502).json({ error: 'Failed to fetch price from upstream' });
+    }
+  }
+});
+
 // GET Signals (History)
 app.get('/signals', async (req: Request, res: Response) => {
   try {

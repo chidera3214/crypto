@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-const BINANCE_REST_URL = 'https://api.binance.com/api/v3/ticker/price';
+const apiHost = process.env.NEXT_PUBLIC_API_URL || 'localhost:4000';
 const POLL_INTERVAL_MS = 3000; // Poll every 3 seconds
 
 export const useLivePrice = (symbol: string) => {
@@ -14,8 +14,9 @@ export const useLivePrice = (symbol: string) => {
 
         const fetchPrice = async () => {
             try {
+                const protocol = apiHost.startsWith('localhost') ? 'http' : 'https';
                 const response = await fetch(
-                    `${BINANCE_REST_URL}?symbol=${binanceSymbol}`
+                    `${protocol}://${apiHost}/price/${binanceSymbol}`
                 );
 
                 if (!response.ok) {
