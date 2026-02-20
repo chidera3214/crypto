@@ -238,6 +238,7 @@ def analyze_gold_strategy(symbol, data_1m):
     closes_1m = data_1m["close"]
     highs_1m = data_1m["high"]
     lows_1m = data_1m["low"]
+    opens_1m = data_1m["open"]
     
     atr_1m = talib.ATR(highs_1m, lows_1m, closes_1m, timeperiod=14)
     current_atr = atr_1m[-2] # Last closed candle ATR
