@@ -1,10 +1,10 @@
 services:
-  # 1. Backend Service (Node.js)
+  # 1. Combined Backend + Engine Service (Docker)
   - type: web
     name: crypto-backend
-    env: node
-    buildCommand: 'cd backend && npm install && npm run build'
-    startCommand: 'cd backend && npm start'
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     envVars:
       - key: PORT
@@ -17,24 +17,7 @@ services:
         value: true
     autoDeploy: false
 
-  # 2. Trading Engine (Python Web Service)
-  - type: web
-    name: crypto-engine
-    env: docker
-    dockerContext: ./engine
-    dockerfilePath: ./engine/Dockerfile
-    plan: free
-    envVars:
-      - key: BACKEND_URL
-        fromService:
-          type: web
-          name: crypto-backend
-          property: host
-      - key: PORT
-        value: 10000
-    autoDeploy: false
-
-  # 3. Frontend Service (Web Service)
+  # 2. Frontend Service (Web Service)
   - type: web
     name: crypto-frontend
     env: node
