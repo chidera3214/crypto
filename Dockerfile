@@ -48,8 +48,8 @@ WORKDIR /app
 COPY start_combined.sh ./
 RUN chmod +x start_combined.sh
 
-# Expose the expected public port (Render uses PORT env var = 10000)
-EXPOSE 10000
+# Expose the expected public port
+EXPOSE 3000
 
 # Start command
 CMD ["./start_combined.sh"]
