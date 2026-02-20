@@ -1,7 +1,7 @@
 services:
   # 1. Combined Backend + Engine Service (Docker)
   - type: web
-    name: crypto-backend
+    name: crypto-combined
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -28,7 +28,7 @@ services:
       - key: NEXT_PUBLIC_API_URL
         fromService:
           type: web
-          name: crypto-backend
+          name: crypto-combined
           property: host
     autoDeploy: false
 
