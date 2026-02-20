@@ -1,29 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+const BINANCE_REST_URL = 'https://api.binance.com/api/v3/ticker/price';
+const POLL_INTERVAL_MS = 3000; // Poll every 3 seconds
 
 export const useLivePrice = (symbol: string) => {
     const [price, setPrice] = useState<number | null>(null);
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
         if (!symbol) return;
 
-        const binanceSymbol = symbol.replace('/', '').toLowerCase();
-        const streamUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@ticker`;
+        const binanceSymbol = symbol.replace('/', '').toUpperCase();
 
-        const ws = new WebSocket(streamUrl);
+        const fetchPrice = async () => {
+            try {
+                const response = await fetch(
+                    `${BINANCE_REST_URL}?symbol=${binanceSymbol}`
+                );
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.c) {
-                setPrice(parseFloat(data.c));
+                if (!response.ok) {
+                    console.warn(`Price fetch failed for ${symbol}: ${response.status}`);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.price) {
+                    setPrice(parseFloat(data.price));
+                }
+            } catch (err) {
+                console.warn(`Price fetch error for ${symbol}:`, err);
             }
         };
 
-        ws.onerror = (err) => {
-            console.error(`WebSocket error for ${symbol}:`, err);
-        };
+        // Fetch immediately, then poll on interval
+        fetchPrice();
+        intervalRef.current = setInterval(fetchPrice, POLL_INTERVAL_MS);
 
         return () => {
-            ws.close();
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         };
     }, [symbol]);
 
