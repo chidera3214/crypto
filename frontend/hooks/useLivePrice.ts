@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 
 const apiHost = process.env.NEXT_PUBLIC_API_URL || 'localhost:4000';
+const protocol = apiHost.includes('localhost') ? 'http' : 'https';
+const baseUrl = apiHost.startsWith('http') ? apiHost : `${protocol}://${apiHost}`;
 const POLL_INTERVAL_MS = 3000; // Poll every 3 seconds
 
 export const useLivePrice = (symbol: string) => {
@@ -14,16 +16,15 @@ export const useLivePrice = (symbol: string) => {
 
         const fetchPrice = async () => {
             try {
-                const protocol = apiHost.startsWith('localhost') ? 'http' : 'https';
                 const response = await fetch(
-                    `${protocol}://${apiHost}/price/${binanceSymbol}`
+                    `${baseUrl}/price/${binanceSymbol}`
                 );
 
                 if (!response.ok) {
                     console.warn(`Price fetch failed for ${symbol}: ${response.status}`);
                     return;
                 }
- 
+
                 const data = await response.json();
                 if (data.price) {
                     setPrice(parseFloat(data.price));

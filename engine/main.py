@@ -27,7 +27,7 @@ if os.environ.get('RENDER'):
 # Configuration
 RAW_HOST = os.getenv("BACKEND_URL", "localhost:4000")
 PROTOCOL = "http" if "localhost" in RAW_HOST else "https"
-BASE_URL = RAW_HOST if RAW_HOST.startswith("http") else f"{PROTOCOL}::{RAW_HOST}"
+BASE_URL = RAW_HOST if RAW_HOST.startswith("http") else f"{PROTOCOL}://{RAW_HOST}"
 if not RAW_HOST.startswith("http"):
     BASE_URL = f"https://{RAW_HOST}" if "localhost" not in RAW_HOST else f"http://{RAW_HOST}"
 else:
