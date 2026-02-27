@@ -5,11 +5,24 @@ import numpy as np
 import talib
 from datetime import datetime
 import os
+import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import threading
 from flask import Flask
+
+# --- Logging Setup (prevents "output too large" on Render) ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger('AlphaScanner')
+
+# Suppress noisy Flask/Werkzeug request logs in production
+if os.environ.get('RENDER'):
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 # Configuration
 RAW_HOST = os.getenv("BACKEND_URL", "localhost:4000")
@@ -444,21 +457,22 @@ def send_email(signal):
         text = msg.as_string()
         server.sendmail(SMTP_USER, EMAIL_TO, text)
         server.quit()
-        print(f"   [SUCCESS] Email sent to {EMAIL_TO}")
+        logger.info(f"Email sent to {EMAIL_TO}")
     except Exception as e:
-        print(f"   [ERROR] Failed to send email: {e}")
+        logger.error(f"Failed to send email: {e}")
 
 def send_signal(signal):
     try:
-        requests.post(BACKEND_URL, json=signal)
-        print(f"   [SUCCESS] Signal Sent: {signal['type']} {signal['symbol']} ({signal['timeframe']})")
+        requests.post(BACKEND_URL, json=signal, timeout=10)
+        logger.info(f"Signal Sent: {signal['type']} {signal['symbol']} ({signal['timeframe']})")
     except Exception as e:
-        print(f"   [ERROR] Failed to send signal to backend: {e}")
+        logger.error(f"Failed to send signal to backend: {e}")
     send_email(signal)
 
 def run_scanner():
-    print(f"Starting AlphaScanner [BTC: Standard | GOLD: Scalp]...")
+    logger.info("Starting AlphaScanner [BTC: Standard | GOLD: Scalp]...")
     last_processed = {} # Key: symbol_timeframe
+    scan_count = 0
     
     while True:
         try:
@@ -484,13 +498,18 @@ def run_scanner():
                                     send_signal(signal)
                                     last_processed[key] = current_ts
                         except Exception as loop_err:
-                            print(f"   [ERROR] Analysis failed for {symbol} {tf}: {loop_err}")
+                            logger.error(f"Analysis failed for {symbol} {tf}: {loop_err}")
                         
                         del data
                     time.sleep(0.5)
         except Exception as e:
-            print(f"   [CRITICAL] Scanner loop error: {e}")
+            logger.critical(f"Scanner loop error: {e}")
             time.sleep(5)
+        
+        scan_count += 1
+        # Log a heartbeat every ~100 cycles (~17 minutes) instead of every cycle
+        if scan_count % 100 == 0:
+            logger.info(f"Scanner alive — completed {scan_count} cycles")
             
         import gc
         gc.collect() 

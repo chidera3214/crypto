@@ -23,7 +23,7 @@ export const useLivePrice = (symbol: string) => {
                     console.warn(`Price fetch failed for ${symbol}: ${response.status}`);
                     return;
                 }
-
+ 
                 const data = await response.json();
                 if (data.price) {
                     setPrice(parseFloat(data.price));
