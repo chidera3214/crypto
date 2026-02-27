@@ -34,7 +34,7 @@ export const ChatComponent: React.FC<ChatProps> = ({ room, title, signalContext 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const livePrice = useLivePrice(signalContext?.signal.symbol || room);
+  const livePrice = useLivePrice(signalContext?.signal.symbol || '');
 
   // Mock User ID
   const [userId] = useState(`Trader_${Math.floor(Math.random() * 1000)}`);
